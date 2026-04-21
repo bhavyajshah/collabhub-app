@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Outlet } from 'react-router-dom'
-import axios from 'axios'
+import api from '../api'
+import { useAuth } from '../context/AuthContext'
 import {
   Avatar, IconButton, Tooltip, Dialog, DialogTitle,
   DialogContent, DialogActions, Button, TextField
@@ -8,14 +9,12 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import LogoutIcon from '@mui/icons-material/Logout'
 import TagIcon from '@mui/icons-material/Tag'
-
-const API_URL = 'http://localhost:5000/api'
+import AdminIcon from '@mui/icons-material/AdminPanelSettings'
 
 export default function Layout() {
   const navigate = useNavigate()
   const { id: activeId } = useParams()
-  const token = localStorage.getItem('token')
-  const user = JSON.parse(localStorage.getItem('user') || '{}')
+  const { user, logout } = useAuth()
 
   const [channels, setChannels] = useState([])
   const [createOpen, setCreateOpen] = useState(false)
@@ -24,26 +23,23 @@ export default function Layout() {
 
   useEffect(() => {
     fetchChannels()
-  }, [channels])
+  }, [])
 
   const fetchChannels = async () => {
     try {
-      const res = await axios.get(`${API_URL}/channels`, {
-        headers: { Authorization: token }
-      })
-      setChannels(res.data)
+      const res = await api.get('/channels')
+      // The backend returns { success: true, data: { channels: [], totalChannels: ... } }
+      const channelsData = res.data.data?.channels || []
+      setChannels(Array.isArray(channelsData) ? channelsData : [])
     } catch (err) {
       console.log(err)
+      setChannels([])
     }
   }
 
   const createChannel = async () => {
     try {
-      await axios.post(
-        `${API_URL}/channels/create`,
-        { name: newName, description: newDesc },
-        { headers: { Authorization: token } }
-      )
+      await api.post('/channels/create', { name: newName, description: newDesc })
       setCreateOpen(false)
       setNewName('')
       setNewDesc('')
@@ -53,21 +49,9 @@ export default function Layout() {
     }
   }
 
-  const handleChannelClick = async (channelId) => {
-    try {
-      await axios.post(`${API_URL}/channels/join/${channelId}`, {}, {
-        headers: { Authorization: token }
-      })
-      navigate(`/channels/${channelId}`)
-    } catch (err) {
-      console.log(err)
-    }
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    navigate('/login')
-  }
+  const handleChannelClick = (channelId) => {
+    navigate(`/dashboard/channels/${channelId}`);
+  };
 
   const initials = (name) => (name ? name.charAt(0).toUpperCase() : '?')
 
@@ -86,7 +70,7 @@ export default function Layout() {
       }}>
         <div
           style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-          onClick={() => navigate('/channels')}
+          onClick={() => navigate('/dashboard')}
         >
           <img src="/webvoltz.svg" alt="Webvoltz" style={{ height: 18 }} />
         </div>
@@ -96,7 +80,7 @@ export default function Layout() {
             <span style={{ color: '#d1d5db', fontSize: 18, fontWeight: 300 }}>/</span>
             <TagIcon sx={{ fontSize: 14, color: '#FFD600' }} />
             <span style={{ color: '#374151', fontSize: 14, fontWeight: 500 }}>
-              {channels.find(c => c._id === activeId)?.name || '...'}
+              {Array.isArray(channels) ? (channels.find(c => c._id === activeId)?.name || '...') : '...'}
             </span>
           </div>
         )}
@@ -107,13 +91,22 @@ export default function Layout() {
               width: 28, height: 28, bgcolor: '#FFD600',
               color: '#111827', fontSize: 12, fontWeight: 800
             }}>
-              {initials(user.username)}
+              {initials(user?.username)}
             </Avatar>
-            <span style={{ color: '#374151', fontSize: 13 }}>{user.username || 'User'}</span>
+            <span style={{ color: '#374151', fontSize: 13 }}>{user?.username || 'User'}</span>
           </div>
+
+          {user?.role === 'admin' && (
+            <Tooltip title="Admin Dashboard">
+              <IconButton onClick={() => navigate('/admin')} size="small">
+                <AdminIcon sx={{ fontSize: 20, color: '#6b7280' }} />
+              </IconButton>
+            </Tooltip>
+          )}
+
           <Tooltip title="Logout">
             <IconButton
-              onClick={handleLogout}
+              onClick={logout}
               size="small"
               sx={{ color: '#9ca3af', '&:hover': { color: '#111827', background: '#f3f4f6' } }}
             >
@@ -134,7 +127,7 @@ export default function Layout() {
           overflowY: 'auto'
         }}>
           <div style={{
-            padding: '18px 14px 6px',
+            padding: '12px 12px 4px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
@@ -163,8 +156,8 @@ export default function Layout() {
             </Tooltip>
           </div>
 
-          <div style={{ flex: 1, padding: '4px 8px 12px' }}>
-            {channels.map(channel => {
+          <div style={{ flex: 1, padding: '4px 8px 8px' }}>
+            {Array.isArray(channels) && channels.map(channel => {
               const isActive = channel._id === activeId
               return (
                 <div
@@ -174,10 +167,10 @@ export default function Layout() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    padding: '7px 10px',
-                    borderRadius: 7,
+                    padding: '6px 8px',
+                    borderRadius: 6,
                     cursor: 'pointer',
-                    marginBottom: 1,
+                    marginBottom: 2,
                     background: isActive ? '#FFD600' : 'transparent',
                     transition: 'all 0.12s ease',
                     userSelect: 'none'
@@ -223,7 +216,7 @@ export default function Layout() {
               width: 26, height: 26, bgcolor: '#FFD600',
               color: '#111827', fontSize: 11, fontWeight: 800
             }}>
-              {initials(user.username)}
+              {initials(user?.username)}
             </Avatar>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{
@@ -231,13 +224,13 @@ export default function Layout() {
                 color: '#374151',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
               }}>
-                {user.username || 'User'}
+                {user?.username || 'User'}
               </p>
               <p style={{
                 margin: 0, fontSize: 10.5, color: '#9ca3af',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
               }}>
-                {user.email || ''}
+                {user?.email || ''}
               </p>
             </div>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />

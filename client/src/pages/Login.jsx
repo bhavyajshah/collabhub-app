@@ -1,32 +1,51 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import axios from 'axios'
-import { TextField, Button, CircularProgress } from '@mui/material'
-
-const API_URL = 'http://localhost:5000/api'
+import api from '../api'
+import { useAuth } from '../context/AuthContext'
+import { TextField, Button, CircularProgress, Snackbar, Alert } from '@mui/material'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   const navigate = useNavigate()
+  const { login } = useAuth()
 
   const handleLogin = async () => {
     setError('')
+    
+    // Basic Client-side Validation
+    if (!email || !password) {
+      setError('Email and password are required')
+      return
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address')
+      return
+    }
+
     setLoading(true)
     try {
-      const res = await axios.post(`${API_URL}/auth/login`, { email, password })
-
-      localStorage.setItem('token', res.data.token)
-      localStorage.setItem('user', JSON.stringify(res.data.user))
-
-      navigate('/channels')
+      const res = await api.post('/auth/login', { email, password })
+      // res.data is { success, message, data: { user, token } }
+      const { user, token } = res.data.data
+      setSuccess(true)
+      setTimeout(() => {
+        login(user, token)
+      }, 1500)
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data || 'Login failed')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCloseSuccess = () => {
+    setSuccess(false)
   }
 
   const inputSx = {
@@ -57,10 +76,10 @@ export default function Login() {
             style={{ height: 22, marginBottom: 20, display: 'inline-block' }}
           />
           <h1 style={{ color: '#111827', fontSize: 22, fontWeight: 700, margin: 0 }}>
-            Sign in
+            Welcome back
           </h1>
           <p style={{ color: '#6b7280', fontSize: 13, margin: '6px 0 0' }}>
-            Welcome back — let's get things done.
+            Sign in to your CollabHub account.
           </p>
         </div>
 
@@ -88,10 +107,8 @@ export default function Login() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <TextField
               label="Email address"
-              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
               fullWidth
               size="small"
               sx={inputSx}
@@ -101,45 +118,53 @@ export default function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
               fullWidth
               size="small"
               sx={inputSx}
             />
+
             <Button
               variant="contained"
               onClick={handleLogin}
               disabled={loading}
-              fullWidth
               sx={{
+                mt: 1,
                 background: '#FFD600',
                 color: '#111827',
                 fontWeight: 700,
-                fontSize: 14,
                 textTransform: 'none',
-                borderRadius: 1.5,
-                padding: '9px 0',
-                mt: 0.5,
+                height: 40,
+                borderRadius: 7,
                 boxShadow: 'none',
                 '&:hover': { background: '#e6c200', boxShadow: 'none' },
-                '&.Mui-disabled': { background: '#fef9c3', color: '#a16207' }
+                '&.Mui-disabled': { background: '#f3f4f6', color: '#9ca3af' }
               }}
             >
-              {loading ? <CircularProgress size={18} sx={{ color: '#111827' }} /> : 'Sign in'}
+              {loading ? <CircularProgress size={20} color="inherit" /> : 'Sign in'}
             </Button>
           </div>
-        </div>
 
-        <p style={{ textAlign: 'center', color: '#6b7280', fontSize: 13, marginTop: 16 }}>
-          Don't have an account?{' '}
-          <Link
-            to="/register"
-            style={{ color: '#111827', fontWeight: 600, textDecoration: 'none', borderBottom: '1px solid #FFD600' }}
-          >
-            Create one
-          </Link>
-        </p>
+          <div style={{ marginTop: 24, textAlign: 'center' }}>
+            <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
+              Don't have an account?{' '}
+              <Link to="/register" style={{ color: '#111827', fontWeight: 600, textDecoration: 'none' }}>
+                Create one
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
+
+      <Snackbar 
+        open={success} 
+        autoHideDuration={1500} 
+        onClose={handleCloseSuccess}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSuccess} severity="success" sx={{ width: '100%', fontWeight: 600 }}>
+          Login successful! Welcome back.
+        </Alert>
+      </Snackbar>
     </div>
   )
 }

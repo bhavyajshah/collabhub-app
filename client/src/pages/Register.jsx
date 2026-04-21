@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import axios from 'axios'
-import { TextField, Button, CircularProgress } from '@mui/material'
-
-const API_URL = 'http://localhost:5000/api'
+import { TextField, Button, CircularProgress, Snackbar, Alert } from '@mui/material'
+import api from '../api'
 
 export default function Register() {
   const [username, setUsername] = useState('')
@@ -11,23 +9,50 @@ export default function Register() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   const navigate = useNavigate()
 
   const handleRegister = async () => {
     setError('')
-    if (!username || !email) {
-      setError('Please fill all fields')
+
+    // Client-side Validation
+    if (!username || !email || !password) {
+      setError('All fields are required')
       return
     }
+
+    if (username.length < 3) {
+      setError('Username must be at least 3 characters long')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long')
+      return
+    }
+
     setLoading(true)
     try {
-      await axios.post(`${API_URL}/auth/register`, { username, email, password })
-      navigate('/login')
+      await api.post('/auth/register', { username, email, password })
+      setSuccess(true)
+      setTimeout(() => {
+        navigate('/login')
+      }, 2000)
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed')
+      setError(err.response?.data?.message || err.response?.data?.error || 'Registration failed')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCloseSuccess = () => {
+    setSuccess(false)
   }
 
   const inputSx = {
@@ -149,6 +174,17 @@ export default function Register() {
           </Link>
         </p>
       </div>
+
+      <Snackbar
+        open={success}
+        autoHideDuration={2000}
+        onClose={handleCloseSuccess}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSuccess} severity="success" sx={{ width: '100%', fontWeight: 600 }}>
+          User registered successfully! Redirecting to login...
+        </Alert>
+      </Snackbar>
     </div>
   )
 }
