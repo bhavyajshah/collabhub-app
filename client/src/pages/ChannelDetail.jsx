@@ -72,6 +72,8 @@ export default function ChannelDetail() {
   const [tab, setTab] = useState(0);
   const [newMessage, setNewMessage] = useState('');
   const [messageType, setMessageType] = useState('standard');
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [replyingTo, setReplyingTo] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const [typingUsers, setTypingUsers] = useState([]);
@@ -245,6 +247,18 @@ export default function ChannelDetail() {
   const handleMessageInputChange = (value) => {
     setNewMessage(value);
 
+    // Detect @mention at the end of the input
+    const words = value.split(/\s+/);
+    const lastWord = words[words.length - 1];
+
+    if (lastWord.startsWith('@')) {
+      const query = lastWord.slice(1).toLowerCase();
+      setMentionQuery(query);
+      setMentionIndex(0);
+    } else {
+      setMentionQuery(null);
+    }
+
     if (!id || !user?._id) return;
 
     if (value.trim()) {
@@ -264,6 +278,48 @@ export default function ChannelDetail() {
     } else {
       window.clearTimeout(typingTimeoutRef.current);
       stopTyping();
+    }
+  };
+
+  const filteredMentions = useMemo(() => {
+    if (mentionQuery === null) return [];
+    return members.filter(m => m.username.toLowerCase().includes(mentionQuery)).slice(0, 5);
+  }, [mentionQuery, members]);
+
+  const insertMention = (username) => {
+    const words = newMessage.split(/\s+/);
+    words.pop(); // Remove the typed @query
+    const textAfterPop = words.length > 0 ? words.join(' ') + ' ' : '';
+    setNewMessage(textAfterPop + `@${username} `);
+    setMentionQuery(null);
+  };
+
+  const handleMessageKeyDown = (event) => {
+    if (mentionQuery !== null && filteredMentions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setMentionIndex((prev) => (prev + 1) % filteredMentions.length);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setMentionIndex((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        insertMention(filteredMentions[mentionIndex].username);
+        return;
+      }
+      if (event.key === 'Escape') {
+        setMentionQuery(null);
+        return;
+      }
+    }
+
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -636,23 +692,52 @@ export default function ChannelDetail() {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'nowrap', position: 'relative' }}>
+              
+              {/* Mentions Popover */}
+              {mentionQuery !== null && filteredMentions.length > 0 && (
+                <Paper 
+                  elevation={4} 
+                  sx={{ 
+                    position: 'absolute', bottom: '100%', left: 160, mb: 1, 
+                    minWidth: 200, borderRadius: 2, overflow: 'hidden', zIndex: 10
+                  }}
+                >
+                  {filteredMentions.map((member, idx) => (
+                    <Box 
+                      key={member._id}
+                      onClick={() => insertMention(member.username)}
+                      sx={{
+                        p: 1, px: 2, display: 'flex', alignItems: 'center', gap: 1.5,
+                        cursor: 'pointer',
+                        bgcolor: idx === mentionIndex ? '#f1f5f9' : 'transparent',
+                        '&:hover': { bgcolor: '#f1f5f9' }
+                      }}
+                    >
+                      <UserAvatar name={member.username} size={24} />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{member.username}</Typography>
+                    </Box>
+                  ))}
+                </Paper>
+              )}
+
               <TextField
                 select
-                label="Bubble Type"
                 value={messageType}
                 onChange={(event) => setMessageType(event.target.value)}
                 size="small"
                 sx={{
-                  minWidth: 170,
+                  minWidth: 120,
                   '& .MuiOutlinedInput-root': {
-                    borderRadius: 3,
-                    bgcolor: '#f8fafc'
+                    borderRadius: 8,
+                    bgcolor: '#f8fafc',
+                    height: 40,
+                    fontSize: 13
                   }
                 }}
               >
                 {MESSAGE_TYPES.map((type) => (
-                  <MenuItem key={type.value} value={type.value}>
+                  <MenuItem key={type.value} value={type.value} sx={{ fontSize: 13 }}>
                     {type.label}
                   </MenuItem>
                 ))}
@@ -661,23 +746,20 @@ export default function ChannelDetail() {
               <TextField
                 fullWidth
                 multiline
-                maxRows={5}
-                placeholder={`Message #${channel?.name || 'channel'} with updates, blockers, or decisions`}
+                maxRows={3}
+                placeholder={`Message #${channel?.name || 'channel'}`}
                 variant="outlined"
                 value={newMessage}
                 onChange={(event) => handleMessageInputChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
+                onKeyDown={handleMessageKeyDown}
                 sx={{
                   flex: 1,
                   '& .MuiOutlinedInput-root': {
-                    borderRadius: 4,
+                    borderRadius: 8,
                     background: '#f8fafc',
-                    alignItems: 'flex-end'
+                    padding: '8px 14px',
+                    fontSize: 14,
+                    lineHeight: 1.4
                   }
                 }}
               />
@@ -686,9 +768,9 @@ export default function ChannelDetail() {
                 disabled={!newMessage.trim() || sendingMessage}
                 onClick={handleSendMessage}
                 sx={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: 4,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 2,
                   background: newMessage.trim()
                     ? 'linear-gradient(135deg, #0f172a 0%, #334155 100%)'
                     : '#e2e8f0',
@@ -700,7 +782,7 @@ export default function ChannelDetail() {
                   }
                 }}
               >
-                {sendingMessage ? <CircularProgress size={22} color="inherit" /> : <SendIcon />}
+                {sendingMessage ? <CircularProgress size={18} color="inherit" /> : <SendIcon sx={{ fontSize: 18 }} />}
               </IconButton>
             </div>
 

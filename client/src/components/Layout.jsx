@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Outlet } from 'react-router-dom'
 import api from '../api'
 import { useAuth } from '../context/AuthContext'
+import useSocket from '../hooks/useSocket'
 import {
   Avatar, IconButton, Tooltip, Dialog, DialogTitle,
-  DialogContent, DialogActions, Button, TextField
+  DialogContent, DialogActions, Button, TextField, Snackbar, Alert
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import LogoutIcon from '@mui/icons-material/Logout'
@@ -20,10 +21,31 @@ export default function Layout() {
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  const [newInvitees, setNewInvitees] = useState('')
+
+  const [notification, setNotification] = useState(null)
+  const { emit, on, off } = useSocket()
 
   useEffect(() => {
     fetchChannels()
   }, [])
+
+  useEffect(() => {
+    if (user && user._id) {
+      emit('registerUser', user._id);
+    }
+  }, [user, emit]);
+
+  useEffect(() => {
+    const handleGlobalNotif = (data) => {
+      // Don't toast if the user is already actively looking at that same channel
+      if (data.channelId && data.channelId !== activeId) {
+        setNotification(data);
+      }
+    };
+    on('globalNotification', handleGlobalNotif);
+    return () => off('globalNotification', handleGlobalNotif);
+  }, [activeId, on, off]);
 
   const fetchChannels = async () => {
     try {
@@ -39,10 +61,11 @@ export default function Layout() {
 
   const createChannel = async () => {
     try {
-      await api.post('/channels/create', { name: newName, description: newDesc })
+      await api.post('/channels/create', { name: newName, description: newDesc, invitees: newInvitees })
       setCreateOpen(false)
       setNewName('')
       setNewDesc('')
+      setNewInvitees('')
       fetchChannels()
     } catch (err) {
       console.log(err)
@@ -290,6 +313,23 @@ export default function Layout() {
                 '& .MuiInputLabel-root.Mui-focused': { color: '#111827' }
               }}
             />
+            <TextField
+              placeholder="user1, team@app.com"
+              label="Invite Teammates"
+              value={newInvitees}
+              onChange={(e) => setNewInvitees(e.target.value)}
+              fullWidth
+              size="small"
+              helperText="Comma separated exact usernames or emails"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: '#e5e7eb' },
+                  '&:hover fieldset': { borderColor: '#d1d5db' },
+                  '&.Mui-focused fieldset': { borderColor: '#FFD600' }
+                },
+                '& .MuiInputLabel-root.Mui-focused': { color: '#111827' }
+              }}
+            />
           </div>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
@@ -313,6 +353,31 @@ export default function Layout() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={!!notification}
+        autoHideDuration={4000}
+        onClose={() => setNotification(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        sx={{ mb: 2, mr: 2, zIndex: 9999 }}
+      >
+        <Alert
+          onClose={() => setNotification(null)}
+          severity="info"
+          sx={{ 
+            width: '100%', 
+            borderRadius: 2,
+            boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+            background: '#ffffff',
+            color: '#0f172a',
+            border: '1px solid #e2e8f0',
+            '& .MuiAlert-icon': { color: '#FFD600' }
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>Notification</div>
+          <div style={{ fontSize: 13, color: '#475569' }}>{notification?.message}</div>
+        </Alert>
+      </Snackbar>
     </div>
   )
 }

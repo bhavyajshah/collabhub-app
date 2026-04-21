@@ -95,15 +95,38 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 io.on('connection', (socket) => {
   console.log('user connected:', socket.id);
 
+  socket.on('registerUser', (userId) => {
+    if (!userId || typeof userId !== 'string') return;
+    socket.join(`user_${userId}`);
+    console.log(`Global User registered: ${userId}`);
+  });
+
   socket.on('joinChannel', async (channelId) => {
     if (!channelId || typeof channelId !== 'string') return;
     socket.join(channelId);
     console.log(`User joined channel: ${channelId}`);
   });
 
-  socket.on('sendMessage', (data) => {
+  socket.on('sendMessage', async (data) => {
     if (!data || !data.channelId || !data.content) return;
     io.to(data.channelId).emit('newMessage', data);
+    
+    // Global notification push to all memebers
+    try {
+      const { default: Channel } = await import('./models/Channel');
+      const channel = await Channel.findById(data.channelId);
+      if (channel) {
+        channel.members.forEach(memberId => {
+          io.to(`user_${memberId.toString()}`).emit('globalNotification', {
+            type: 'message',
+            channelId: data.channelId,
+            message: `New message in ${channel.name} by ${data.sender?.username || 'someone'}`
+          });
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
   });
 
   socket.on('messageRead', (data) => {

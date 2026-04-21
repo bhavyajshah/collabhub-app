@@ -55,7 +55,7 @@ export const getChannelById = async (req: AuthRequest, res: Response) => {
 
 export const createChannel = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, invitees } = req.body;
 
     if (!name || name.trim().length < 3) {
       return errorResponse(res, 'Channel name must be at least 3 characters', 400);
@@ -65,10 +65,27 @@ export const createChannel = async (req: AuthRequest, res: Response) => {
       return errorResponse(res, 'Channel name is too long (max 50)', 400);
     }
 
+    const membersSet = new Set([req.user.id]);
+
+    if (invitees && typeof invitees === 'string') {
+      const identifiers = invitees.split(',').map(s => s.trim()).filter(Boolean);
+      
+      if (identifiers.length > 0) {
+        const usersFound = await User.find({
+          $or: [
+            { username: { $in: identifiers } },
+            { email: { $in: identifiers.map(i => i.toLowerCase()) } }
+          ]
+        });
+        
+        usersFound.forEach(u => membersSet.add((u._id || u.id).toString()));
+      }
+    }
+
     const channel = new Channel({
       name: name.trim(),
       description,
-      members: [req.user.id],
+      members: Array.from(membersSet),
       createdBy: req.user.id
     });
 
